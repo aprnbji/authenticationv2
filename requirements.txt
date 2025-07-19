@@ -1,5 +1,8 @@
 opencv-python
+face-recognition
 mediapipe
-tensorflow
-deepface
+numpy
 redis
+fastapi
+uvicorn[standard]
+python-multipart
