@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureID - Facial Authentication</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+    :root {
+        --bg-start: #232526;
+        --bg-end: #414345;
+        --panel-bg: rgba(30, 31, 33, 0.7);
+        --border-color: rgba(255, 255, 255, 0.1);
+        --text-primary: #f0f0f0;
+        --text-secondary: #a0a0a0;
+        --accent-primary: #4A90E2;
+        --accent-secondary: #50E3C2;
+        --success: #50E3C2;
+        --error: #FF6B6B;
+        --info: #4A90E2;
+    }
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        font-family: 'Inter', sans-serif;
+        background: linear-gradient(135deg, var(--bg-start), var(--bg-end));
+        min-height: 100vh;
+        color: var(--text-primary);
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .main-container {
+        max-width: 500px;
+        width: 100%;
+        position: relative;
+    }
+
+    .auth-panel {
+        background: var(--panel-bg);
+        backdrop-filter: blur(15px);
+        border-radius: 24px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 16px 60px rgba(0, 0, 0, 0.3);
+        padding: 30px;
+    }
+
+    .header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .header h1 {
+        font-size: 2rem;
+        font-weight: 700;
+    }
+
+    .header .subtitle {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+
+    .mode-toggle {
+        display: flex;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+        padding: 4px;
+        margin-bottom: 24px;
+    }
+
+    .mode-btn {
+        flex: 1;
+        padding: 12px;
+        background: none;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .mode-btn.active {
+        color: var(--text-primary);
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .camera-container {
+        position: relative;
+        width: 100%;
+        padding-top: 75%;
+        margin: 0 auto 20px;
+        border-radius: 16px;
+        overflow: hidden;
+        background: #111;
+        border: 1px solid var(--border-color);
+    }
+
+    #video,
+    .face-overlay,
+    .face-label {
+        position: absolute;
+    }
+
+    #video {
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: none;
+        transform: scaleX(-1);
+    }
+
+    .face-overlay {
+        border: 2px solid;
+        border-radius: 8px;
+        display: none;
+        box-shadow: 0 0 20px;
+    }
+
+    .face-label {
+        display: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #fff;
+        transform: translateY(calc(-100% - 10px));
+    }
+
+    .face-label.success {
+        background-color: var(--success);
+    }
+
+    .face-label.error {
+        background-color: var(--error);
+    }
+
+    .user-input input {
+        width: 100%;
+        padding: 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        font-size: 1rem;
+        background: rgba(0, 0, 0, 0.2);
+        color: var(--text-primary);
+    }
+
+    .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin: 24px 0;
+    }
+
+    .btn {
+        padding: 14px;
+        border: none;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+        background: var(--accent-primary);
+        color: white;
+    }
+
+    .btn-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary);
+    }
+
+    .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .status {
+        margin-top: 20px;
+        padding: 14px;
+        border-radius: 10px;
+        font-weight: 500;
+        display: none;
+        border: 1px solid;
+        text-align: center;
+    }
+
+    .status.success {
+        background: rgba(80, 227, 194, 0.1);
+        color: var(--success);
+        border-color: var(--success);
+    }
+
+    .status.error {
+        background: rgba(255, 107, 107, 0.1);
+        color: var(--error);
+        border-color: var(--error);
+    }
+
+    #databasePanel {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(10px);
+        z-index: 100;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .db-modal {
+        background: var(--panel-bg);
+        border-radius: 24px;
+        border: 1px solid var(--border-color);
+        padding: 30px;
+        width: 90%;
+        max-width: 600px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .db-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .db-header h2 {
+        font-size: 1.5rem;
+    }
+
+    .db-close-btn {
+        font-size: 2rem;
+        color: var(--text-secondary);
+        cursor: pointer;
+        background: none;
+        border: none;
+    }
+
+    .db-table-container {
+        overflow-y: auto;
+    }
+
+    .db-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .db-table th,
+    .db-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .db-table th {
+        color: var(--text-secondary);
+    }
+
+    .btn-delete {
+        background: var(--error);
+        color: white;
+        padding: 6px 12px;
+        font-size: 0.8rem;
+    }
+
+    #noUsersMessage {
+        text-align: center;
+        padding: 40px;
+        color: var(--text-secondary);
+    }
+</style>
+
+</head>
+<body>
+    <div class="main-container">
+        <div class="auth-panel">
+            <div class="header"><h1>SecureID</h1><p class="subtitle">Facial Authentication</p></div>
+            <div class="mode-toggle">
+                <button class="mode-btn active" onclick="switchMode('verify')">Verify Identity</button>
+                <button class="mode-btn" onclick="switchMode('enroll')">Enroll User</button>
+            </div>
+            <div id="enrollSection" style="display: none;"><div class="user-input"><input type="text" id="userName" placeholder="Enter full name for enrollment" maxlength="50"></div></div>
+            <div class="camera-container">
+                <video id="video" autoplay muted playsinline></video>
+                <div class="face-overlay" id="faceOverlay"></div>
+                <div class="face-label" id="faceLabel"></div>
+            </div>
+            <div class="controls">
+                <button class="btn btn-primary" id="startCamera" onclick="startCamera()">Start Camera</button>
+                <button class="btn btn-secondary" id="stopCamera" onclick="stopCamera()" disabled>Stop Camera</button>
+            </div>
+            <button class="btn btn-primary" style="width:100%; margin-bottom: 10px;" id="captureBtn" onclick="manualCapture()" disabled>Enroll New User</button>
+            <button class="btn btn-secondary" style="width:100%;" onclick="showDatabasePanel()">Manage Database</button>
+            <div id="status" class="status"></div>
+        </div>
+    </div>
+
+    <div id="databasePanel">
+        <div class="db-modal">
+            <div class="db-header">
+                <h2>User Database</h2>
+                <button class="db-close-btn" onclick="hideDatabasePanel()">×</button>
+            </div>
+            <div class="db-table-container">
+                <table class="db-table">
+                    <thead><tr><th>User Name</th><th>Action</th></tr></thead>
+                    <tbody id="userTableBody"></tbody>
+                </table>
+                <p id="noUsersMessage" style="display:none;">No users found in the database.</p>
+            </div>
+            <button class="btn btn-secondary" style="color: var(--error); margin-top: 20px;" onclick="clearDatabase()">Clear Entire Database</button>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'verify', stream = null, analysisInterval = null;
+        const video = document.getElementById('video'), faceOverlay = document.getElementById('faceOverlay');
+        const statusDiv = document.getElementById('status'), captureBtn = document.getElementById('captureBtn');
+        const faceLabel = document.getElementById('faceLabel'), databasePanel = document.getElementById('databasePanel');
+        const userTableBody = document.getElementById('userTableBody'), noUsersMessage = document.getElementById('noUsersMessage');
+
+        function switchMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('enrollSection').style.display = mode === 'enroll' ? 'block' : 'none';
+            captureBtn.style.display = mode === 'enroll' ? 'block' : 'none';
+            if (mode === 'verify') hideStatus();
+        }
+
+        async function startCamera() {
+            if (stream) return;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
+                video.srcObject = stream; video.style.display = 'block';
+                document.getElementById('startCamera').disabled = true;
+                document.getElementById('stopCamera').disabled = false;
+                if (currentMode === 'enroll') captureBtn.disabled = false;
+                analysisInterval = setInterval(sendFrameForAnalysis, 250);
+            } catch (err) { showStatus('Camera access denied. Please check permissions.', 'error'); }
+        }
+
+        function stopCamera() {
+            if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; }
+            if (analysisInterval) clearInterval(analysisInterval);
+            video.style.display = 'none'; faceOverlay.style.display = 'none'; faceLabel.style.display = 'none';
+            document.getElementById('startCamera').disabled = false;
+            document.getElementById('stopCamera').disabled = true;
+            captureBtn.disabled = true;
+            hideStatus();
+        }
+        
+        function getFrameAsJPEG(quality = 0.8) {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL('image/jpeg', quality);
+        }
+
+        async function sendFrameForAnalysis(isManual = false, mode = 'verify', name = '') {
+            if (!stream || !video.videoWidth) return;
+            const imageData = getFrameAsJPEG(isManual ? 0.9 : 0.8);
+            try {
+                const response = await fetch('/api/process-frame', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode, image: imageData, name })
+                });
+                if (!response.ok) throw new Error(`Server error: ${response.statusText}`);
+                const data = await response.json();
+                updateUI(data, isManual);
+            } catch (error) {
+                console.error('Analysis Error:', error);
+                if (isManual) { showStatus('Failed to communicate with server.', 'error'); }
+            }
+        }
+        
+        async function manualCapture() {
+            const userName = document.getElementById('userName').value.trim();
+            if (currentMode === 'enroll' && !userName) { showStatus('Please enter a name before enrolling.', 'error'); return; }
+            showStatus('Processing...', 'info', true);
+            await sendFrameForAnalysis(true, currentMode, userName);
+        }
+
+        function updateUI(data, isManual) {
+            if (data.location) {
+                const [top, right, bottom, left] = data.location;
+                const videoRect = video.getBoundingClientRect();
+                const scaleX = videoRect.width / video.videoWidth;
+                const scaleY = videoRect.height / video.videoHeight;
+                const mirroredLeft = video.videoWidth - right;
+                faceOverlay.style.left = mirroredLeft * scaleX + 'px';
+                faceOverlay.style.top = top * scaleY + 'px';
+                faceOverlay.style.width = (right - left) * scaleX + 'px';
+                faceOverlay.style.height = (bottom - top) * scaleY + 'px';
+                faceLabel.style.left = (mirroredLeft * scaleX) + 'px';
+                faceLabel.style.top = (top * scaleY) + 'px';
+                const isVerified = data.status === 'VERIFIED' && data.name !== 'Unknown';
+                faceOverlay.style.borderColor = isVerified ? 'var(--success)' : 'var(--error)';
+                faceOverlay.style.boxShadow = isVerified ? '0 0 20px var(--success)' : '0 0 20px var(--error)';
+                faceLabel.textContent = isVerified ? `Verified: ${data.name}` : `Unverified`;
+                faceLabel.className = 'face-label ' + (isVerified ? 'success' : 'error');
+                faceOverlay.style.display = 'block';
+                faceLabel.style.display = 'block';
+            } else {
+                faceOverlay.style.display = 'none';
+                faceLabel.style.display = 'none';
+            }
+            if (isManual || data.status === 'ENROLLED' || data.status === 'ERROR') {
+                let message = '', type = 'info';
+                switch(data.status) {
+                    case 'ENROLLED': message = `User "${data.name}" enrolled!`; type = 'success'; break;
+                    case 'VERIFIED': message = data.name !== 'Unknown' ? `Welcome, ${data.name}!` : 'Identity not recognized.'; type = data.name !== 'Unknown' ? 'success' : 'error'; break;
+                    case 'SPOOF': message = `Spoof attempt detected: ${data.reason}`; type = 'error'; break;
+                    case 'ERROR': message = `Error: ${data.reason}`; type = 'error'; break;
+                }
+                if (message) showStatus(message, type);
+            }
+        }
+        function showStatus(message, type, showLoader = false) { statusDiv.innerHTML = showLoader ? `<span class="loading"></span>${message}` : message; statusDiv.className = `status ${type}`; statusDiv.style.display = 'block'; }
+        function hideStatus() { statusDiv.style.display = 'none'; }
+
+        async function showDatabasePanel() {
+            try {
+                const response = await fetch('/api/users');
+                const data = await response.json();
+                renderUserTable(data.users);
+                databasePanel.style.display = 'flex';
+            } catch (error) {
+                showStatus('Failed to fetch user list.', 'error');
+            }
+        }
+
+        function hideDatabasePanel() {
+            databasePanel.style.display = 'none';
+        }
+
+        function renderUserTable(users) {
+            userTableBody.innerHTML = '';
+            if (users.length === 0) {
+                noUsersMessage.style.display = 'block';
+                userTableBody.style.display = 'none';
+            } else {
+                noUsersMessage.style.display = 'none';
+                userTableBody.style.display = '';
+                users.forEach(name => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${name}</td>
+                        <td><button class="btn btn-delete" onclick="deleteUser('${name}')">Delete</button></td>
+                    `;
+                    userTableBody.appendChild(row);
+                });
+            }
+        }
+
+        async function deleteUser(name) {
+            if (!confirm(`Are you sure you want to delete user: ${name}?`)) return;
+            try {
+                await fetch('/api/delete-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                showStatus(`User "${name}" deleted.`, 'success');
+                showDatabasePanel(); 
+            } catch (error) {
+                showStatus('Failed to delete user.', 'error');
+            }
+        }
+
+        async function clearDatabase() {
+            if (!confirm('Are you sure you want to clear the ENTIRE database? This cannot be undone.')) return;
+            try {
+                await fetch('/api/clear-database', { method: 'POST' });
+                showStatus('Database cleared successfully.', 'success');
+                renderUserTable([]); 
+            } catch (error) {
+                showStatus('Failed to clear database.', 'error');
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+             switchMode('verify');
+        });
+
+    </script>
+</body>
+</html>
