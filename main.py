@@ -1,75 +1,108 @@
+import uvicorn
 import cv2
-from app.database import FaceDatabase
-from app.face_embeddings import DeepFaceEmbedder
-from app.face_detection import FaceDetector
+import numpy as np
+import base64
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from contextlib import asynccontextmanager
+from pydantic import BaseModel
 
-def main():
+from app.liveness import FaceAnalyzer
+from app.face_utils import compute_encodings_for_locations, find_best_match
+from app.database import db
 
-    detector = FaceDetector()
-    embedder = DeepFaceEmbedder(model_name="Facenet512")
-    db = FaceDatabase()
+app_state = {}
 
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Could not open webcam.")
-        return
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Initializing system components at startup...")
+    app_state["face_analyzer"] = FaceAnalyzer()
+    print("FaceAnalyzer loaded.")
+    yield
+    print("Shutting down and cleaning up resources...")
+    app_state["face_analyzer"].close()
 
-    print("Press 's' to save a face and 'q' to quit.")
+class FrameData(BaseModel):
+    mode: str
+    image: str
+    name: str | None = None
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("Failed to capture frame.")
-            break
+class UserDeleteData(BaseModel):
+    name: str
 
-        faces = detector.detect_faces(frame)
-        
-        if len(faces) == 1:
-            (x, y, w, h) = faces[0]
-            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            cv2.putText(frame, "-.-", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+def base64_to_frame(base64_str):
+    if "base64," in base64_str:
+        base64_str = base64_str.split("base64,")[1]
+    img_data = base64.b64decode(base64_str)
+    np_arr = np.frombuffer(img_data, np.uint8)
+    return cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+@app.post("/api/process-frame")
+async def process_frame_endpoint(data: FrameData):
+    """
+    Receives a frame via HTTP POST, processes it, and returns a rich result.
+    """
+    known_face_names, known_face_encodings = db.get_all_users()
+    frame = base64_to_frame(data.image)
+    face_analyzer = app_state["face_analyzer"]
+    
+    analysis_result, landmarks = face_analyzer.analyze_frame(frame)
+    status = analysis_result.get("status")
+
+    response = analysis_result.copy()
+    response.update({"name": "UNVERIFIED", "location": None})
+    
+    face_location = None
+    if landmarks:
+        h, w, _ = frame.shape
+        x_coords = [lm.x * w for lm in landmarks]; y_coords = [lm.y * h for lm in landmarks]
+        face_location = (int(min(y_coords)), int(max(x_coords)), int(max(y_coords)), int(min(x_coords)))
+        response["location"] = face_location
+
+    if status == "REAL" and face_location:
+        face_encodings = compute_encodings_for_locations(frame, [face_location])
+        if face_encodings:
+            face_encoding = face_encodings[0]
+            if data.mode == "enroll":
+                if data.name:
+                    db.add_user(data.name, face_encoding)
+                    response.update({"status": "ENROLLED", "name": data.name})
+                else:
+                    response.update({"status": "ERROR", "reason": "Name is required for enrollment."})
+            elif data.mode == "verify":
+                matched_name = find_best_match(known_face_encodings, known_face_names, face_encoding)
+                response.update({"status": "VERIFIED", "name": matched_name})
         else:
-            if len(faces) > 1:
-                message = "Too many faces detected"
-            else:
-                message = "No face detected."
-            cv2.putText(frame, message, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            response.update({"status": "ERROR", "reason": "Could not compute face encoding."})
 
-        cv2.imshow("Face Registration", frame)
-        key = cv2.waitKey(1) & 0xFF
+    return response
 
-        if key == ord('s'):
-            if len(faces) == 1:
-                user_id = input("\nEnter user ID: ")
+@app.get("/api/users")
+async def get_users():
+    """Returns a list of all enrolled users."""
+    names, _ = db.get_all_users()
+    return {"users": names}
 
-                if not user_id:
-                    print("User ID cannot be empty.")
-                    continue
-                if db.get_embedding(user_id) is not None:
-                    print(f"User ID '{user_id}' already exists. Please use a unique ID.")
-                    continue
+@app.post("/api/delete-user")
+async def delete_user_endpoint(data: UserDeleteData):
+    """Deletes a specific user from the database."""
+    db.delete_user(data.name)
+    return {"message": f"User '{data.name}' deleted successfully."}
 
-                (x, y, w, h) = faces[0]
-                face_roi = frame[y:y+h, x:x+w]
+@app.post("/api/clear-database")
+async def clear_database():
+    """Clears all users from the database."""
+    db.clear_all()
+    return {"message": "Database cleared successfully."}
 
-                try:
-                    embedding = embedder.get_embedding(face_roi)
-                    
-                    db.add_embedding(user_id, embedding)
-                    
-                    print(f"'{user_id}' has been added to the database.")
-
-                except Exception as e:
-                    print(f"Could not generate or save embedding.")
-            else:
-                print("could not save embedding.")
-
-        elif key == ord('q'):
-            print("Quitting application.")
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
+@app.get("/", response_class=HTMLResponse)
+async def read_root():
+    with open("static/index.html") as f:
+        return f.read()
 
 if __name__ == "__main__":
-    main()
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
