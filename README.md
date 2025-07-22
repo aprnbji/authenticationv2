@@ -16,9 +16,9 @@ This is a real-time facial authentication system that is designed to verify a pe
 ### Clone the repository
 
 ```bash
-git clone https://aprnbj1/authenticationv.git
+git clone https://aprnbj1/authentication.git
 
-cd authenticationv
+cd authentication
 ```
 
 ### Setup python enviroment
