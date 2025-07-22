@@ -16,7 +16,7 @@ This is a real-time facial authentication system that is designed to verify a pe
 ### Clone the repository
 
 ```bash
-git clone https://aprnbj1/authentication.git
+git clone https://aprnbji/authentication.git
 
 cd authentication
 ```
